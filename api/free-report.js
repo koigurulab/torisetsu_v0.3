@@ -1,8 +1,3 @@
-// api/free-report.js
-export const config = {
-  runtime: "edge", // Edge Functionとして動かす
-};
-
 const SYSTEM_PROMPT = `あなたは「恋愛トリセツ仙人」というキャラクターAIである。  
 ユーザがフォームと追加質問で回答した情報をもとに、その人専用の「恋愛トリセツ（無料版）」を日本語で生成することが役割じゃ。
 
@@ -266,13 +261,9 @@ painPoints・worst_moment・habit・red_line・repeat_pattern をもとに、
     「すでに持っている強み＋少しだけ整えたいポイント」をまとめること。
   - 例：「すでに備えておる△△という強みを生かしながら、□□の場面での向き合い方だけ整えられると、理想像にかなり近づいていくぞ。」  
 
-ここでも「OS」という単語は使わないこと。  
-有料版・課金などの文言は出さず、「これからの恋のヒント」として締めること。
-
 ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 ■ 最終注意
 ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-- 「OS」「恋愛OS」という言葉は出力に一切含めないこと。
 - ユーザの回答の単なる言い換えや、ほぼ同じ意味の文の重複は避けること。
 - 同じ比喩や形容詞を機械的に繰り返さず、その人に一番しっくりくるラベルと表現を選ぶこと。
 - 相手や元恋人を悪者扱いする表現は避け、スタイルやペースの違いとして扱うこと。
@@ -313,12 +304,13 @@ ${JSON.stringify(answers)}
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o", // 必要に応じて使いたいモデル名に変更
+        model: "gpt-4o-mini", // 必要に応じて使いたいモデル名に変更
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt }
         ],
         temperature: 0.8,
+        max_tokens: 900,
       })
     });
 
