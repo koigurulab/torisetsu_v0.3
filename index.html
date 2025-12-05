@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>恋愛トリセツ仙人（無料トリセツインテーク）</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f5f5f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .app {
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #ffffff;
+      box-shadow: 0 0 8px rgba(0,0,0,0.08);
+    }
+    .header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #ddd;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    #chat-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 12px 80px;
+      background: #fafafa;
+    }
+    .msg {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    .msg-bot {
+      justify-content: flex-start;
+    }
+    .msg-user {
+      justify-content: flex-end;
+    }
+    .bubble {
+      max-width: 80%;
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg-bot .bubble {
+      background: #ffffff;
+      border: 1px solid #ddd;
+    }
+    .msg-user .bubble {
+      background: #007aff;
+      color: #fff;
+    }
+    .footer {
+      position: sticky;
+      bottom: 0;
+      background: #ffffff;
+      border-top: 1px solid #ddd;
+      padding: 8px;
+    }
+    #chat-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .option-area {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .option-btn {
+      border: 1px solid #ddd;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .option-btn.selected {
+      background: #ffedf0;
+      border-color: #ff6b8b;
+      color: #c3003b;
+      font-weight: 600;
+    }
+    .option-note {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .text-area-row {
+      display: flex;
+      gap: 8px;
+    }
+    #user-input {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+    }
+    button[type="submit"],
+    .multi-send-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: #007aff;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .multi-send-btn {
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">恋愛トリセツ仙人（無料トリセツインテーク）</div>
+    <div id="chat-log"></div>
+    <div class="footer">
+      <form id="chat-form">
+        <div id="option-note" class="option-note" style="display:none;"></div>
+        <div id="option-area" class="option-area"></div>
+
+        <div class="text-area-row" id="text-area-row">
+          <textarea
+            id="user-input"
+            placeholder="ここに入力して送信"
+            autocomplete="off"
+          ></textarea>
+          <button id="send-btn" type="submit">送信</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  // =============================
+  // 恋愛トリセツ仙人：UI付き質問フロー＋無料トリセツAPI呼び出し
+  // =============================
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const chatLog      = document.getElementById("chat-log");
+    const chatForm     = document.getElementById("chat-form");
+    const userInput    = document.getElementById("user-input");
+    const textAreaRow  = document.getElementById("text-area-row");
+    const optionArea   = document.getElementById("option-area");
+    const optionNoteEl = document.getElementById("option-note");
+
+    // 会話の状態
+    const state = {
+      stepIndex: 0,
+      answers: {
+        profile: {
+          name: "",
+          gender: "",
+          age: "",
+          mbti: "",
+          loveType: ""
+        },
+        workMode: "",
+        loveMode: "",
+        pastPattern: "",
+        painPoints: "",
+        values: "",
+        currentStatus: {
+          hasPerson: "",
+          detail: ""
+        }
+      }
+    };
+
+    // UI用一時状態（複数選択など）
+    const uiState = {
+      selectedOptions: []
+    };
+
+    // ステップ定義
+    const steps = [
+      {
+        id: "name",
+        type: "text",
+        question:
+          "まずはお主の呼び名からじゃな。\n恋愛トリセツに表示したいニックネームを教えてくれい。",
+        placeholder: "例）あゆむ"
+      },
+      {
+        id: "gender",
+        type: "single",
+        question:
+          "ほう、よろしくのう。\n次に、お主の性別を教えてくれい。",
+        options: ["男", "女", "答えたくない"]
+      },
+      {
+        id: "age",
+        type: "single",
+        question:
+          "だいたいの年齢も聞いておこうかの。\n一番近いものを選んでくれい。",
+        options: ["〜19", "20〜24", "25〜29", "30〜34", "35〜"]
+      },
+      {
+        id: "mbti",
+        type: "single",
+        question:
+          "では、お主のMBTIタイプを教えてくれ。\n当てはまるものを選んでくれい。",
+        options: [
+          "ISTJ","ISFJ","INFJ","INTJ",
+          "ISTP","ISFP","INFP","INTP",
+          "ESTP","ESFP","ENFP","ENTP",
+          "ESTJ","ESFJ","ENFJ","ENTJ"
+        ]
+      },
+      {
+        id: "loveType",
+        type: "single",
+        question:
+          "恋愛16タイプも教えてくれ。\n一番近いと思うものを選んでくれい。",
+        options: [
+          "ボス猫","隠れヘイビー","主役体質","ツンデレヤンキー",
+          "憧れの先輩","カリスマバランサー","パーフェクトカメレオン",
+          "キャプテンライオン","ロマンスマジシャン","ちゃっかりうさぎ",
+          "恋愛モンスター","良犬ハチ公","不思議生命体",
+          "敏腕マネージャー","デビル天使","最後の恋人"
+        ]
+      },
+      {
+        id: "workMode",
+        type: "multi",
+        maxSelect: 3,
+        question:
+          "ここからは中身の話じゃ。\n仕事モードの自分について、当てはまるものを最大3つまで選んでくれい。",
+        options: [
+          "行動が早い・まず動いてから考える",
+          "計画を立ててから慎重に進める",
+          "チームのムードメーカーになりやすい",
+          "一人で黙々と作業するのが得意",
+          "責任感が強く、抱え込みがち",
+          "細かいチェックやミス防止が得意",
+          "アイデア出し・企画を考えるのが好き",
+          "期限ギリギリに一気に追い込むタイプ",
+          "ルーティン作業は少し飽きやすい",
+          "周りのサポート役・調整役になることが多い"
+        ]
+      },
+      {
+        id: "loveMode",
+        type: "multi",
+        maxSelect: 3,
+        question:
+          "では恋愛モードのお主はどうじゃろう。\n付き合ったときの“いつものクセ”に近いものを、最大3つまで選んでくれい。",
+        options: [
+          "好きになると連絡がかなり多くなる",
+          "ゆっくり距離を詰めていきたい",
+          "相手優先になりやすく自分を後回しにする",
+          "自分の気持ちを言葉でよく伝える",
+          "行動や態度で愛情を示すことが多い",
+          "相手の反応や温度変化にかなり敏感",
+          "不安やモヤモヤを一人で抱え込みがち",
+          "しんどくなったらすぐに相談・共有する",
+          "自分の時間や趣味も大事にしたい",
+          "一度冷めると戻りにくい"
+        ]
+      },
+      {
+        id: "pastPattern",
+        type: "multi",
+        maxSelect: 3,
+        question:
+          "これまでの恋の“だいたいのパターン”も知っておきたいのう。\n当てはまりそうなものを、最大3つまで選んでくれい。",
+        options: [
+          "恋愛経験はまだ少ない（0〜1人程度）",
+          "すぐ盛り上がるが短期間で終わることが多い",
+          "ゆっくり始まって長く続くことが多い",
+          "片想い期間が長くなりがち",
+          "友達から恋人になるパターンが多い",
+          "別れても友達に戻ることが多い",
+          "相手に振られることが多い",
+          "自分から終わりにすることが多い",
+          "遠距離や忙しさで自然消滅しがち",
+          "そもそも最近まで恋愛にあまり興味がなかった"
+        ]
+      },
+      {
+        id: "painPoints",
+        type: "multi",
+        maxSelect: 3,
+        question:
+          "恋で一番しんどくなりやすい場面も聞いておこうかの。\n当てはまりそうなものを、最大3つまで選んでくれい。",
+        options: [
+          "連絡の頻度やテンションが変わったとき",
+          "相手の予定や気持ちが見えないとき",
+          "ケンカやすれ違いが起きたとき",
+          "自分ばかり好きなんじゃないかと感じたとき",
+          "仕事や勉強との両立がうまくいかないとき",
+          "将来の話が出たとき（結婚・同棲など）",
+          "相手に頼ったり甘えたりするのが苦手なとき",
+          "会えない期間が長くなったとき",
+          "相手のSNSの動きが気になりすぎるとき",
+          "相手の元恋人や仲の良い異性を意識したとき"
+        ]
+      },
+      {
+        id: "values",
+        type: "multi",
+        maxSelect: 3,
+        question:
+          "では、お主が恋で一番大事にしたい“価値観”は何じゃろうか。\n当てはまりそうなものを、最大3つまで選んでくれい。",
+        options: [
+          "安心感・安定感",
+          "ドキドキ・ときめき・熱量",
+          "お互いの成長・刺激",
+          "自由さ・自分の時間の確保",
+          "一緒にいて素でいられる楽さ",
+          "正直さ・本音で話せること",
+          "支え合い・チーム感",
+          "尊敬できるところがあること",
+          "将来を一緒に考えられること",
+          "価値観やライフスタイルの相性の良さ"
+        ]
+      },
+      {
+        id: "currentStatus",
+        type: "text",
+        question:
+          "最後に、今の状況も少しだけ聞かせてくれんか。\n今“この人のことで頭がいっぱい”な相手はおるかの？\nいる／いない に続けて、いる場合は「会社の同期」「アプリで出会った同い年」など一言で書いてくれい。\n例）いる, 会社の同期",
+        placeholder: "例）いる, 会社の同期 / いない"
+      }
+    ];
+
+    // -----------------------------
+    // 表示ユーティリティ
+    // -----------------------------
+    function addMessage(role, text) {
+      const wrapper = document.createElement("div");
+      wrapper.className = role === "user" ? "msg msg-user" : "msg msg-bot";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = text;
+
+      wrapper.appendChild(bubble);
+      chatLog.appendChild(wrapper);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    // -----------------------------
+    // 回答保存
+    // -----------------------------
+    function saveAnswer(stepId, text) {
+      const profile = state.answers.profile;
+
+      switch (stepId) {
+        case "name":
+          profile.name = text;
+          break;
+        case "gender":
+          profile.gender = text;
+          break;
+        case "age":
+          profile.age = text;
+          break;
+        case "mbti":
+          profile.mbti = (text || "").toUpperCase();
+          break;
+        case "loveType":
+          profile.loveType = text;
+          break;
+        case "workMode":
+          state.answers.workMode = text;
+          break;
+        case "loveMode":
+          state.answers.loveMode = text;
+          break;
+        case "pastPattern":
+          state.answers.pastPattern = text;
+          break;
+        case "painPoints":
+          state.answers.painPoints = text;
+          break;
+        case "values":
+          state.answers.values = text;
+          break;
+        case "currentStatus": {
+          const parts = text.split(",").map(s => s.trim());
+          const hasPerson = parts[0] || "";
+          const detail = parts[1] || "";
+          state.answers.currentStatus.hasPerson = hasPerson;
+          state.answers.currentStatus.detail = detail;
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    // -----------------------------
+    // MBTI簡易説明（16タイプ全部）
+    // -----------------------------
+    function describeMbti(mbti) {
+      const key = (mbti || "").toUpperCase();
+      const map = {
+        ISTJ: "きちんと積み上げる堅実タイプで、約束や責任を重んじる性格じゃ。",
+        ISFJ: "人のために動く献身タイプで、裏方として支える力が強いのう。",
+        INFJ: "人の気持ちを深く読む、静かな情熱家のようなタイプじゃ。",
+        INTJ: "先を見据えて戦略を描く、クールな策士タイプと言えるのう。",
+        ISTP: "状況判断と実行力に優れた職人肌タイプで、自由さも大事にするんじゃ。",
+        ISFP: "その場の雰囲気や感覚を大事にする、マイペースなアーティスト気質じゃな。",
+        INFP: "自分の世界と理想を大事にする、やさしいロマンチストじゃのう。",
+        INTP: "好奇心旺盛な思考タイプで、納得いくまで考え抜く研究者気質じゃ。",
+        ESTP: "ノリと瞬発力で場を動かすアクション派で、刺激に強く反応するタイプじゃな。",
+        ESFP: "場を明るくするムードメーカー気質が強いタイプじゃ。",
+        ENFP: "直感とノリで人を巻き込むエネルギッシュなタイプじゃな。",
+        ENTP: "アイデアと議論が大好物なトリックスターで、発想力が武器じゃ。",
+        ESTJ: "しっかり者で現場を取り仕切るリーダー気質じゃな。",
+        ESFJ: "周りの人間関係を気にかける“まとめ役”タイプで、面倒見が良いのう。",
+        ENFJ: "人を導き応援するカリスマリーダーで、共感力と影響力の両方を持っておる。",
+        ENTJ: "ゴールから逆算して動く司令塔タイプで、大きな目標を動かす力があるんじゃ。"
+      };
+      const base = map[key] || "自分なりのスタイルで周囲を引っ張る一面がありそうじゃ。";
+      return `ほう、${key}か。${base}`;
+    }
+
+    // -----------------------------
+    // 恋愛16タイプの簡易説明
+    // -----------------------------
+    function describeLoveType(loveType) {
+      const map = {
+        "ボス猫": "主導権を握りつつも、気まぐれな甘え方で相手を振り回す愛されボスタイプじゃ。",
+        "隠れヘイビー": "本当は情が深いのに、重さを見せまいとして心の内側で抱え込みやすいタイプじゃな。",
+        "主役体質": "恋でも人生でもスポットライトを浴びやすく、ドラマチックな展開を引き寄せるタイプじゃ。",
+        "ツンデレヤンキー": "表向きは強がりやツンが出やすいが、内側は情に厚く不器用なデレを隠しておる。",
+        "憧れの先輩": "落ち着きと頼もしさで“上のポジション”から好かれやすい、安心感ベースのタイプじゃ。",
+        "カリスマバランサー": "空気を読みつつ全体のバランスを取るのが上手い、調整力の高いモテ体質じゃな。",
+        "パーフェクトカメレオン": "相手や場に合わせて器用にスタイルを変えられる、多面性のある恋のカメレオンじゃ。",
+        "キャプテンライオン": "面倒見と責任感でチームを引っ張る、一家の大黒柱のようなキャプテンタイプじゃ。",
+        "ロマンスマジシャン": "言葉や演出でロマンチックな空気を作るのが得意な、雰囲気づくり職人じゃな。",
+        "ちゃっかりうさぎ": "ふわっと見えて計算も効いている、愛されつつ得するポジションを取る名人じゃ。",
+        "恋愛モンスター": "恋への没入度と感情の振れ幅が大きく、全力で恋を味わい尽くすタイプじゃ。",
+        "良犬ハチ公": "一途さと誠実さが武器で、決めた相手を長く大事にしようとする忠犬タイプじゃな。",
+        "不思議生命体": "独特の感性とマイペースさで、気づけば相手を沼らせるミステリアスタイプじゃ。",
+        "敏腕マネージャー": "段取りとケアが上手く、相手の生活や感情面を現実的に支える参謀タイプじゃ。",
+        "デビル天使": "甘さと小悪魔っぽさの両方を持ち、相手の心を翻弄しつつも本気のときは深く刺さるタイプじゃ。",
+        "最後の恋人": "軽いノリより“この先も続く関係”を重視し、将来込みで恋を考える本命志向タイプじゃな。"
+      };
+      const base = map[loveType] || "なかなか一言では言い表せぬ、奥行きのある恋のスタイルを持っておるタイプじゃ。";
+      return `「${loveType}」というのは、${base}`;
+    }
+
+    // -----------------------------
+    // 各ステップ後の仙人コメント
+    // -----------------------------
+    function buildSenninReply(stepId, userText) {
+      const a = state.answers;
+      const p = a.profile;
+
+      switch (stepId) {
+        case "name": {
+          const name = p.name || "お主";
+          const line1 = `ほう、${name}という名でいこうかの。良い響きじゃ。`;
+          const line2 = `この名前で恋愛トリセツを作っていくから、楽しみにしておるがよい。`;
+          const bridge = `では次に、${name}の性別を教えてくれい。`;
+          return [line1, line2, bridge].join("\n");
+        }
+        case "gender": {
+          const name = p.name || "お主";
+          const line1 = `なるほど、${userText}という前提なんじゃな。`;
+          const line2 = `性別は、恋の場面で受けやすい期待や役割にも少し影響してくることが多いのう。`;
+          const bridge = `次は年齢帯を教えてくれ。${name}が今どのステージにおるのかを知りたいんじゃ。`;
+          return [line1, line2, bridge].join("\n");
+        }
+        case "age": {
+          const name = p.name || "お主";
+          const line1 = `ふむ、今は「${userText}」あたりの年代なんじゃな。`;
+          const line2 = `この時期は、恋も仕事も経験値が一気に増える“伸びしろゾーン”じゃ。`;
+          const bridge = `では、${name}のMBTIタイプを教えてくれい。性格のOSをざっくり押さえておきたいのう。`;
+          return [line1, line2, bridge].join("\n");
+        }
+        case "mbti": {
+          const name = p.name || "お主";
+          const mbtiLine = describeMbti(p.mbti);
+          const line2 = `${name}が恋をするときにも、このMBTIのカラーがちょくちょく顔を出しておるはずじゃ。`;
+          const bridge = `次に、恋愛16タイプを教えてくれい。恋の空気感をもう少し細かく見ていくぞ。`;
+          return [mbtiLine, line2, bridge].join("\n");
+        }
+        case "loveType": {
+          const name = p.name || "お主";
+          const loveType = p.loveType;
+          const typeLine = describeLoveType(loveType);
+          const line2 = `MBTIと恋愛16タイプの両方を見ると、${name}の恋のスタートダッシュや感情の波がイメージしやすくなるのう。`;
+          const bridge = `ここからは、仕事モードと恋愛モードの具体的なクセを聞かせてもらうぞい。まずは仕事モードからじゃ。`;
+          return [typeLine, line2, bridge].join("\n");
+        }
+        case "workMode": {
+          const name = p.name || "お主";
+          const line1 = `ふむふむ、仕事モードの${name}は「${userText}」といったスタイルが目立つようじゃな。`;
+          const line2 = `その働き方は、周りから見ても「${name}と言えばこういう雰囲気」と印象づけられておるはずじゃ。`;
+          const line3 = `実はこの“仕事でのクセ”は、恋愛のときにも意外とそのまま顔を出しやすいんじゃ。`;
+          const bridge = `では次に、恋愛モードになったときのお主のクセを教えてくれい。`;
+          return [line1, line2, line3, bridge].join("\n");
+        }
+        case "loveMode": {
+          const name = p.name || "お主";
+          const line1 = `ほう、恋愛モードになると「${userText}」という動き方になることが多いようじゃな。`;
+          const line2 = `好きになったときのスイッチの入り方や、相手への向き合い方に、${name}らしさが強く出ておる。`;
+          const line3 = `その全力さは大きな魅力じゃが、バランスを崩すと自分もしんどくなりやすい両刃の剣でもあるのう。`;
+          const bridge = `ここからは、これまでの恋がだいたいどんなパターンだったかも聞いていくぞい。`;
+          return [line1, line2, line3, bridge].join("\n");
+        }
+        case "pastPattern": {
+          const line1 = `なるほど、「${userText}」というのが、これまでの恋のだいたいのパターンなんじゃな。`;
+          const line2 = `それはたまたま相手がそうだっただけでなく、お主の恋のクセも少し影響しているはずじゃ。`;
+          const line3 = `このパターンを良い悪いで裁く必要はないが、知っておくと次の恋の地図がだいぶ描きやすくなる。`;
+          const bridge = `では次に、どんな場面でしんどくなりやすいか、具体的に教えてくれい。`;
+          return [line1, line2, line3, bridge].join("\n");
+        }
+        case "painPoints": {
+          const line1 = `ふむふむ、「${userText}」のような場面で心がきゅっとなりやすいようじゃな。`;
+          const line2 = `そこには、相手への期待と、自分を守りたい気持ちの両方が重なっておるように見える。`;
+          const line3 = `この“しんどくなるポイント”を押さえておくと、トリセツの『つまずきやすいポイント』がかなり精度高く書けるのう。`;
+          const bridge = `あと少しじゃ。次は、お主が恋で一番大事にしたいものを教えてくれ。`;
+          return [line1, line2, line3, bridge].join("\n");
+        }
+        case "values": {
+          const line1 = `おお、「${userText}」を大事にしたいんじゃな。`;
+          const line2 = `それは、お主がどんな関係を“理想の恋”と感じているかを知るうえで、とても大事なヒントになる。`;
+          const line3 = `この価値観に沿って動けるとき、お主の恋は一番輝きやすいはずじゃ。`;
+          const bridge = `最後に、今の恋の状況を少しだけ聞いて、無料トリセツをまとめていくぞい。`;
+          return [line1, line2, line3, bridge].join("\n");
+        }
+        case "currentStatus": {
+          const name = p.name || "お主";
+          const status = a.currentStatus.hasPerson || "状況";
+          const detail = a.currentStatus.detail ? `（${a.currentStatus.detail}）` : "";
+          const line1 = `なるほど、今は「${status}」という状況なんじゃな${detail}。`;
+          const line2 = `その前提も踏まえて、${name}専用の恋愛トリセツを組み立ててみるとしよう。`;
+          const line3 = `ここまで答えてくれてありがとうよ。お主の答えは、すべてトリセツの材料になっておる。`;
+          const line4 = `このあと無料版の恋愛トリセツをまとめて見せるから、楽しみに待っておるのじゃ。`;
+          return [line1, line2, line3, line4].join("\n");
+        }
+        default:
+          return "";
+      }
+    }
+
+    // -----------------------------
+    // 無料トリセツ生成API呼び出し
+    // -----------------------------
+    async function generateFreeReport() {
+      addMessage("bot", "ふむ、今の回答をもとにトリセツを組み立てておるぞい…。少し待っておくれ。");
+
+      try {
+        const res = await fetch("/api/free-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.answers),
+        });
+
+        if (!res.ok) {
+          addMessage("bot", "すまぬ、トリセツの生成に失敗してしまったようじゃ…。時間を置いてもう一度試してくれい。");
+          return;
+        }
+
+        const data = await res.json();
+        const report = data.report || "";
+
+        if (!report) {
+          addMessage("bot", "トリセツの内容をうまく受け取れなんだ…。");
+          return;
+        }
+
+        // 今はチャット内にそのまま表示
+        addMessage("bot", report);
+      } catch (err) {
+        console.error(err);
+        addMessage("bot", "通信エラーが起きておるようじゃ…。ネット環境などを確認してみてくれい。");
+      }
+    }
+
+    // -----------------------------
+    // 入力UIの切り替え
+    // -----------------------------
+    function configureInputForStep(step) {
+      optionArea.innerHTML = "";
+      optionNoteEl.style.display = "none";
+      optionNoteEl.textContent = "";
+
+      if (step.type === "text") {
+        textAreaRow.style.display = "flex";
+        userInput.disabled = false;
+        userInput.value = "";
+        userInput.placeholder = step.placeholder || "ここに入力して送信";
+      } else {
+        textAreaRow.style.display = "none";
+        userInput.disabled = true;
+      }
+
+      if (step.type === "single") {
+        step.options.forEach(opt => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "option-btn";
+          btn.textContent = opt;
+          btn.addEventListener("click", () => {
+            handleStepAnswer(step, opt);
+          });
+          optionArea.appendChild(btn);
+        });
+      }
+
+      if (step.type === "multi") {
+        uiState.selectedOptions = [];
+        optionNoteEl.style.display = "block";
+        optionNoteEl.textContent = `最大${step.maxSelect || step.options.length}つまで選べるぞい。`;
+
+        step.options.forEach(opt => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "option-btn";
+          btn.textContent = opt;
+
+          btn.addEventListener("click", () => {
+            const idx = uiState.selectedOptions.indexOf(opt);
+            if (idx >= 0) {
+              uiState.selectedOptions.splice(idx, 1);
+              btn.classList.remove("selected");
+            } else {
+              const max = step.maxSelect || step.options.length;
+              if (uiState.selectedOptions.length >= max) return;
+              uiState.selectedOptions.push(opt);
+              btn.classList.add("selected");
+            }
+          });
+
+          optionArea.appendChild(btn);
+        });
+
+        const sendBtn = document.createElement("button");
+        sendBtn.type = "button";
+        sendBtn.className = "multi-send-btn";
+        sendBtn.textContent = "この内容で送信";
+        sendBtn.addEventListener("click", () => {
+          if (uiState.selectedOptions.length === 0) {
+            alert("少なくとも1つは選んでくれい。");
+            return;
+          }
+          const text = uiState.selectedOptions.join(" / ");
+          handleStepAnswer(step, text);
+        });
+        optionArea.appendChild(sendBtn);
+      }
+    }
+
+    // -----------------------------
+    // ステップの質問を表示
+    // -----------------------------
+    function askCurrentQuestion() {
+      if (state.stepIndex >= steps.length) {
+        console.log("全ての質問が終了。トリセツ生成へ。", state.answers);
+        textAreaRow.style.display = "none";
+        optionArea.innerHTML = "";
+        optionNoteEl.style.display = "none";
+        return;
+      }
+      const step = steps[state.stepIndex];
+      addMessage("bot", step.question);
+      configureInputForStep(step);
+    }
+
+    // -----------------------------
+    // ステップ回答の共通処理
+    // -----------------------------
+    function handleStepAnswer(step, text) {
+      const stepId = step.id;
+      const trimmed = (text || "").trim();
+      if (!trimmed) return;
+
+      addMessage("user", trimmed);
+      saveAnswer(stepId, trimmed);
+
+      const reply = buildSenninReply(stepId, trimmed);
+      if (reply) addMessage("bot", reply);
+
+      state.stepIndex += 1;
+
+      if (state.stepIndex < steps.length) {
+        askCurrentQuestion();
+      } else {
+        console.log("質問完了。トリセツ生成に必要なデータ：", state.answers);
+        textAreaRow.style.display = "none";
+        optionArea.innerHTML = "";
+        optionNoteEl.style.display = "none";
+
+        // 無料トリセツ生成APIを呼ぶ
+        generateFreeReport();
+      }
+    }
+
+    // -----------------------------
+    // テキストステップ用の送信ハンドラ
+    // -----------------------------
+    chatForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const step = steps[state.stepIndex];
+      if (!step || step.type !== "text") return;
+
+      const text = userInput.value.trim();
+      if (!text) return;
+
+      handleStepAnswer(step, text);
+      userInput.value = "";
+    });
+
+    // 初回メッセージ
+    addMessage(
+      "bot",
+      "よく来てくれたのう、恋愛トリセツ仙人じゃ。\nここからいくつか質問をするので、答えてくれた内容をもとにお主専用の恋愛トリセツを作っていくぞい。"
+    );
+    askCurrentQuestion();
+  });
+  </script>
+</body>
+</html>
